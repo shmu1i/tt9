@@ -33,6 +33,7 @@ class ModeWords extends ModeCheonjiin {
 	// text analysis tools
 	private final AutoTextCase autoTextCase;
 	private boolean isCursorDirectionForward = false;
+	private boolean isRecomposing = false;
 	private int textFieldTextCase;
 
 
@@ -60,6 +61,7 @@ class ModeWords extends ModeCheonjiin {
 	@Override
 	public boolean onBackspace() {
 		isCursorDirectionForward = false;
+		autoTextCase.doNotSkipNext();
 
 		if (digitSequence.isEmpty()) {
 			clearWordStem();
@@ -76,6 +78,7 @@ class ModeWords extends ModeCheonjiin {
 
 		if (digitSequence.isEmpty()) {
 			clearWordStem();
+			endRecomposing();
 		} else if (stem.length() > digitSequence.length()) {
 			stem = stem.substring(0, digitSequence.length());
 		}
@@ -123,7 +126,13 @@ class ModeWords extends ModeCheonjiin {
 
 	@Override
 	public String recompose() {
+		isRecomposing = false;
 		if (!language.hasSpaceBetweenWords() || language.isTranscribed()) {
+			return null;
+		}
+
+		String after = textField.getStringAfterCursor(1);
+		if (!after.isEmpty() && !Character.isWhitespace(after.codePointAt(0))) {
 			return null;
 		}
 
@@ -139,6 +148,7 @@ class ModeWords extends ModeCheonjiin {
 			reset();
 			digitSequence = language.getDigitSequenceForWord(previousWord);
 			textCase = new Text(language, previousWord).getTextCase();
+			isRecomposing = true;
 		} catch (InvalidLanguageCharactersException e) {
 			Logger.d(LOG_TAG, "Not recomposing word: '" + previousWord + "'. " + e.getMessage());
 			return null;
@@ -146,6 +156,14 @@ class ModeWords extends ModeCheonjiin {
 
 		return previousWord;
 	}
+
+	private void endRecomposing() {
+		if (isRecomposing) {
+			isRecomposing = false;
+			textCase = settings.getTextCase();
+		}
+	}
+
 
 	@Override
 	public void reset() {
@@ -310,6 +328,7 @@ class ModeWords extends ModeCheonjiin {
 			clearLastAcceptedWord();
 		} else {
 			reset();
+			endRecomposing();
 		}
 		stem = "";
 
@@ -344,7 +363,8 @@ class ModeWords extends ModeCheonjiin {
 
 	@Override
 	public void determineNextWordTextCase(int nextDigit) {
-		textCase = autoTextCase.determineNextWordTextCase(language, textCase, textFieldTextCase, textField.getStringBeforeCursor(), digitSequence + nextDigit);
+		final String nextSequence = nextDigit >= 0 ? digitSequence + nextDigit : digitSequence;
+		textCase = autoTextCase.determineNextWordTextCase(language, textCase, textFieldTextCase, textField.getStringBeforeCursor(), nextSequence);
 	}
 
 	private void determineTextFieldTextCase() {
@@ -356,35 +376,45 @@ class ModeWords extends ModeCheonjiin {
 	public int getTextCase() {
 		// Filter out the internally used text cases. They have no meaning outside this class.
 		return switch (textCase) {
-			case CASE_UPPER, CASE_LOWER -> textCase;
-			default -> seq.isAnySpecialCharSequence(digitSequence) ? CASE_LOWER : CASE_CAPITALIZE;
+			case CASE_UPPER, CASE_CAPITALIZE -> textCase;
+			case CASE_DICTIONARY -> CASE_CAPITALIZE;
+			default -> CASE_LOWER;
 		};
 	}
 
-
 	@Override
-	public boolean nextTextCase() {
-		int before = textCase;
-		boolean changed = super.nextTextCase();
-
-		// When we are in AUTO mode and current dictionary word is in uppercase,
-		// the mode would switch to UPPERCASE, but visually, the word would not change.
-		// This is why we retry, until there is a visual change.
-		// Yet, we allow adjusting individual words to lowercase, if needed.
-		if (digitSequence.isEmpty() && settings.getAutoTextCase() && language.hasUpperCase() && (before == CASE_LOWER || textCase == CASE_LOWER)) {
-			changed = super.nextTextCase();
+	public boolean nextTextCase(@Nullable String currentWord, int displayTextCase) {
+		if (!language.hasUpperCase()) {
+			return false;
 		}
 
-		if (seq.startsWithAnySpecialCharSequence(digitSequence) && textCase == CASE_CAPITALIZE) {
-			super.nextTextCase();
+		boolean isTyping = currentWord != null && !currentWord.isEmpty();
+		boolean isTyingSpecialChar = isTyping && currentWord.length() == 1 && !Character.isAlphabetic(currentWord.charAt(0));
+
+		if (isTyingSpecialChar) {
+			textCase = displayTextCase;
+		} else if (isTyping) {
+			textCase = new Text(language, currentWord).getTextCase();
+		} else {
+			textCase = getTextCase();
 		}
 
-		// since it's a user's choice, the default matters no more
+		// do not capitalize words like: 've, 's, 'll, etc, only allow upper and lower cases.
+		boolean changed = super.nextTextCase(currentWord, displayTextCase);
+		if (textCase != CASE_LOWER && textCase != CASE_UPPER && currentWord != null && currentWord.length() > 1 && !Character.isAlphabetic(currentWord.charAt(0))) {
+			changed = super.nextTextCase(currentWord, displayTextCase);
+		}
+
+		// since the user made an explicit choice, the app default matters no more
 		textFieldTextCase = changed ? CASE_UNDEFINED : textFieldTextCase;
 
 		return changed;
 	}
 
+	@Override
+	public void skipNextTextCaseDetection() {
+		autoTextCase.skipNext();
+	}
 
 	@Override
 	public boolean shouldReplaceLastLetter(int n, boolean h) {
@@ -488,7 +518,7 @@ class ModeWords extends ModeCheonjiin {
 		String modeString = language.getName();
 		if (textCase == CASE_UPPER) {
 			return modeString.toUpperCase(language.getLocale());
-		} else if (textCase == CASE_LOWER && !settings.getAutoTextCase()) {
+		} else if (textCase == CASE_LOWER) {
 			return modeString.toLowerCase(language.getLocale());
 		} else {
 			return modeString;

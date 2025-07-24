@@ -187,13 +187,9 @@ abstract public class CommandHandler extends TextEditingHandler {
 		settings.setDefaultCharOrder(mLanguage, false); // initialize default order, if missing
 
 		// for languages that do not have ABC or Predictive, make sure we remain in valid state
-		final String digits = mInputMode.getSequence();
-		final int textCase = mInputMode.getTextCase();
-		mInputMode = InputMode.getInstance(settings, mLanguage, inputType, textField, determineInputModeId());
-		if (!InputModeKind.isNumeric(mInputMode)) {
-			mInputMode.setTextCase(textCase);
-			mInputMode.setSequence(digits);
-		}
+		mInputMode = InputMode
+			.getInstance(settings, mLanguage, inputType, textField, determineInputModeId())
+			.copy(mInputMode);
 
 		getSuggestions(null);
 		setStatusIcon(mInputMode, mLanguage);
@@ -213,34 +209,26 @@ abstract public class CommandHandler extends TextEditingHandler {
 
 
 	protected boolean nextTextCase() {
-		if (!mInputMode.nextTextCase()) {
+		final String currentWord = suggestionOps.isEmpty() || mInputMode.getSequence().isEmpty() ? "" : suggestionOps.getCurrent();
+
+		if (!mInputMode.nextTextCase(currentWord, statusIconTextCase)) {
 			return false;
 		}
 
+		mInputMode.skipNextTextCaseDetection();
+		settings.saveTextCase(mInputMode.getTextCase());
+
 		// if there are no suggestions or they are special chars, we don't need to adjust their text case
-		final String before = suggestionOps.getCurrent();
-		boolean beforeStartsWithLetter = !before.isEmpty() && Character.isAlphabetic(before.charAt(0));
-		if (!beforeStartsWithLetter) {
-			settings.saveTextCase(mInputMode.getTextCase());
+		if (currentWord.isEmpty() || (currentWord.length() == 1 && !Character.isAlphabetic(currentWord.charAt(0)))) {
 			return true;
 		}
 
-		// When we are in AUTO mode and current dictionary word is in uppercase,
-		// the mode would switch to UPPERCASE, but visually, the word would not change.
-		// This is why we retry using the code below, until there is a visual change.
+		// if there are suggestions, we need to adjust their text case to acknowledge the change
 		int currentSuggestionIndex = suggestionOps.getCurrentIndex();
 		currentSuggestionIndex = suggestionOps.containsStem() ? currentSuggestionIndex - 1 : currentSuggestionIndex;
 
-		for (int retries = 0; retries <= 2; retries++) {
-			if (!before.equals(mInputMode.getSuggestions().get(currentSuggestionIndex)) || !mInputMode.nextTextCase()) {
-				break;
-			}
-		}
-
 		suggestionOps.set(mInputMode.getSuggestions(), currentSuggestionIndex, mInputMode.containsGeneratedSuggestions());
 		textField.setComposingText(suggestionOps.getCurrent());
-
-		settings.saveTextCase(mInputMode.getTextCase());
 
 		return true;
 	}

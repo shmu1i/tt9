@@ -15,6 +15,7 @@ import io.github.sspanak.tt9.util.sys.DeviceInfo;
 import io.github.sspanak.tt9.util.sys.SystemSettings;
 
 abstract class UiHandler extends AbstractHandler {
+	protected int statusIconTextCase = InputMode.CASE_UNDEFINED;
 	protected SettingsStore settings;
 	protected ResizableMainView mainView = null;
 	protected StatusBar statusBar = null;
@@ -36,7 +37,7 @@ abstract class UiHandler extends AbstractHandler {
 		setInputView(mainView.getView());
 		createSuggestionBar();
 		getSuggestionOps().setDarkTheme();
-		statusBar = new StatusBar(settings, mainView.getView());
+		statusBar = new StatusBar(this, settings, mainView.getView(), this::resetStatus);
 	}
 
 
@@ -73,14 +74,18 @@ abstract class UiHandler extends AbstractHandler {
 			return modeTextCase;
 		}
 
-		int wordTextCase = currentWord.getTextCase();
+		final int wordTextCase = currentWord.getTextCase();
 		return wordTextCase == InputMode.CASE_UPPER ? InputMode.CASE_CAPITALIZE : wordTextCase;
 	}
 
 
 	protected void setStatusIcon(@Nullable InputMode mode, @Nullable Language language) {
-		int displayTextCase = getDisplayTextCase(language, mode != null ? mode.getTextCase() : InputMode.CASE_UNDEFINED);
-		int resId = new StatusIcon(settings, mode, language, displayTextCase).resourceId;
+		if (!settings.isStatusIconEnabled()) {
+			return;
+		}
+
+		statusIconTextCase = getDisplayTextCase(language, mode != null ? mode.getTextCase() : InputMode.CASE_UNDEFINED);
+		final int resId = new StatusIcon(settings, mode, language, statusIconTextCase).resourceId;
 		if (resId == 0) {
 			hideStatusIcon();
 		} else {

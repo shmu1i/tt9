@@ -30,6 +30,11 @@ class SettingsPunctuation extends SettingsInput {
 
 
 	public void setDefaultCharOrder(@NonNull Language language, boolean overwrite) {
+		if (overwrite) {
+			setIncludeNewlineInChars0(language, true);
+			setIncludeTabInChars0(language, true);
+		}
+
 		if (overwrite || noDefault0Chars(language)) {
 			ArrayList<String> key0Chars = language.getKeyCharacters(0);
 			if (key0Chars == null) {
@@ -127,7 +132,14 @@ class SettingsPunctuation extends SettingsInput {
 		}
 
 		String safeChars = prefs.getString(CHARS_0_PREFIX + language.getId(), null);
-		safeChars = safeChars == null ? null : safeChars.replace("⏎", "\n").replace(Characters.TAB, "\t").replace(" ", Characters.getSpace(language));
+		if (safeChars != null) {
+			safeChars = safeChars
+				.replace("⏎", "\n")
+				.replace(Characters.TAB, "\t")
+				.replace("Tab", "\t") // also convert the legacy "Tab" string
+				.replace(" ", Characters.getSpace(language));
+
+		}
 
 		return getCharsAsList(safeChars, language.getKeyCharacters(0));
 	}
@@ -181,5 +193,23 @@ class SettingsPunctuation extends SettingsInput {
 		}
 
 		return charsList;
+	}
+
+	public boolean getIncludeNewlineInChars0(Language language) {
+		return prefs.getBoolean("punctuation_order_include_newline_" + language.getId(), true);
+	}
+
+	public void setIncludeNewlineInChars0(Language language, boolean include) {
+		prefsEditor.putBoolean("punctuation_order_include_newline_" + language.getId(), include);
+		prefsEditor.apply();
+	}
+
+	public boolean getIncludeTabInChars0(Language language) {
+		return prefs.getBoolean("punctuation_order_include_tab_" + language.getId(), true);
+	}
+
+	public void setIncludeTabInChars0(Language language, boolean include) {
+		prefsEditor.putBoolean("punctuation_order_include_tab_" + language.getId(), include);
+		prefsEditor.apply();
 	}
 }

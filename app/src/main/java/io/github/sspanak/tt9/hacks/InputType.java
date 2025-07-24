@@ -1,8 +1,10 @@
 package io.github.sspanak.tt9.hacks;
 
 import android.content.Context;
+import android.inputmethodservice.InputMethodService;
 import android.view.inputmethod.EditorInfo;
-import android.view.inputmethod.InputConnection;
+
+import androidx.annotation.Nullable;
 
 import io.github.sspanak.tt9.ime.helpers.StandardInputType;
 import io.github.sspanak.tt9.util.sys.DeviceInfo;
@@ -10,9 +12,9 @@ import io.github.sspanak.tt9.util.sys.DeviceInfo;
 public class InputType extends StandardInputType {
 	private final boolean isUs;
 
-	public InputType(Context context, InputConnection inputConnection, EditorInfo inputField) {
-		super(inputConnection, inputField);
-		isUs = isAppField(context != null ? context.getPackageName() : "", EditorInfo.TYPE_NULL);
+	public InputType(@Nullable InputMethodService ims, EditorInfo inputField) {
+		super(ims, inputField);
+		isUs = isAppField(ims != null ? ims.getPackageName() : null, EditorInfo.TYPE_NULL);
 	}
 
 
@@ -50,6 +52,13 @@ public class InputType extends StandardInputType {
 		return
 			(isAppInput("com.android.contacts", 33)) // only detect the old Contacts
 			&& (field.imeOptions & EditorInfo.IME_FLAG_NO_EXTRACT_UI) == EditorInfo.IME_FLAG_NO_EXTRACT_UI;
+	}
+
+
+	public boolean isCalculator() {
+		return field != null
+			&& (field.packageName.endsWith("calculator") || field.packageName.endsWith(".calc"))
+			&& (field.inputType & EditorInfo.TYPE_MASK_CLASS) == EditorInfo.TYPE_CLASS_NUMBER;
 	}
 
 
@@ -101,6 +110,20 @@ public class InputType extends StandardInputType {
 			DeviceInfo.IS_LG_X100S
 			&& isAppField("com.android.contacts", EditorInfo.TYPE_CLASS_PHONE)
 			&& ((field.imeOptions & imeOptions) == imeOptions);
+	}
+
+
+	public boolean notMessenger() {
+		return field == null || !field.packageName.equals("com.facebook.orca");
+	}
+
+	public boolean isMessengerChat() {
+		return isAppInput("com.facebook.orca", 147457);
+	}
+
+
+	public boolean isMessengerNonText() {
+		return isAppInput("com.facebook.orca", EditorInfo.TYPE_NULL);
 	}
 
 
@@ -195,12 +218,10 @@ public class InputType extends StandardInputType {
 	 * they don't have a physical keyboard.
 	 * <a href="https://github.com/sspanak/tt9/issues/538">Beeps on CAT S22 Flip</a>
 	 * <a href="https://github.com/sspanak/tt9/issues/549">The UI does not appear on Xiaomi Redmi 12c</a>
+	 * <a href="https://github.com/sspanak/tt9/issues/827">UI not hiding in 3rd-party calculators</a>
 	 */
 	protected boolean isSpecialNumeric(Context context) {
-		return
-			field.packageName.contains("com.android.calculator") // there is "calculator2", hence the contains()
-			|| isDumbPhoneDialer(context)
-			|| isLgX100SDialer();
+		return isCalculator() || isDumbPhoneDialer(context) || isLgX100SDialer();
 	}
 
 

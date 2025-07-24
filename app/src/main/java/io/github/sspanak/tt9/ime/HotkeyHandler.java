@@ -47,15 +47,22 @@ public abstract class HotkeyHandler extends CommandHandler {
 
 		int action = textField.getAction();
 
+		boolean actionPerformed;
+
 		if (action == TextField.IME_ACTION_ENTER) {
-			boolean actionPerformed = appHacks.onEnter();
+			actionPerformed = appHacks.onEnter();
 			if (actionPerformed) {
 				forceShowWindow();
 			}
+
+			updateShiftState(true, false);
 			return actionPerformed;
 		}
 
-		return appHacks.onAction(action) || textField.performAction(action);
+		actionPerformed = appHacks.onAction(action) || textField.performAction(action);
+		updateShiftState(true, false);
+
+		return actionPerformed;
 	}
 
 
@@ -234,9 +241,7 @@ public abstract class HotkeyHandler extends CommandHandler {
 		mInputMode.onAcceptSuggestion(suggestionOps.acceptIncomplete());
 		resetKeyRepeat();
 
-		if (settings.isMainLayoutNumpad()) {
-			mainView.renderKeys();
-		}
+		mainView.renderDynamicKeys();
 
 		return true;
 	}
@@ -273,9 +278,7 @@ public abstract class HotkeyHandler extends CommandHandler {
 				.loadSuggestions(filter);
 		}
 
-		if (settings.isMainLayoutNumpad()) {
-			mainView.renderKeys();
-		}
+		mainView.renderDynamicKeys();
 
 		return true;
 	}
@@ -292,9 +295,7 @@ public abstract class HotkeyHandler extends CommandHandler {
 
 		backward = isLanguageRTL != backward;
 		scrollSuggestions(backward);
-		if (settings.isMainLayoutNumpad()) {
-			mainView.renderKeys();
-		}
+		mainView.renderDynamicKeys();
 
 		return true;
 	}

@@ -108,7 +108,7 @@ public class DictionaryLoader {
 
 
 	public static void load(Context context, Language language) {
-		self.load(context, new ArrayList<>() {{ add(language); }});
+		getInstance(context).load(context, new ArrayList<>() {{ add(language); }});
 	}
 
 
@@ -117,22 +117,23 @@ public class DictionaryLoader {
 			return false;
 		}
 
-		Long lastUpdateTime = self.lastAutoLoadAttemptTime.get(language.getId());
-		boolean isItTooSoon = lastUpdateTime != null && System.currentTimeMillis() - lastUpdateTime < SettingsStore.DICTIONARY_AUTO_LOAD_COOLDOWN_TIME;
+		final Long lastUpdateTime = self.lastAutoLoadAttemptTime.get(language.getId());
+		final boolean isItTooSoon = lastUpdateTime != null && System.currentTimeMillis() - lastUpdateTime < SettingsStore.DICTIONARY_AUTO_LOAD_COOLDOWN_TIME;
 		if (isItTooSoon) {
 			return false;
 		}
 
 		DataStore.getLastLanguageUpdateTime(
 			(hash) -> {
-				self.lastAutoLoadAttemptTime.put(language.getId(), System.currentTimeMillis());
+				getInstance(context).lastAutoLoadAttemptTime.put(language.getId(), System.currentTimeMillis());
 
-				// no words at all, load without confirmation
-				if (hash.isEmpty()) {
+				final boolean noDictionary = hash == null || hash.isEmpty();
+				final boolean isDictionaryOutdated = noDictionary || !hash.equals(new WordFile(context, language, self.assets).getHash());
+				final boolean noNotifications = !(new SettingsStore(context).getNotificationsApproved());
+
+				if (noDictionary || (isDictionaryOutdated && noNotifications)) {
 					load(context, language);
-				}
-				// or if the database is outdated, compared to the dictionary file, ask for confirmation and load
-				else if (!hash.equals(new WordFile(context, language, self.assets).getHash())) {
+				} else if (isDictionaryOutdated) {
 					new DictionaryUpdateNotification(context, language).show();
 				}
 			},
@@ -206,12 +207,12 @@ public class DictionaryLoader {
 		} catch (DictionaryImportAbortedException e) {
 			sqlite.failTransaction();
 			stop();
-			self.lastAutoLoadAttemptTime.put(language.getId(), null);
+			lastAutoLoadAttemptTime.put(language.getId(), null);
 			Logger.i(LOG_TAG, e.getMessage() + ". File '" + language.getDictionaryFile() + "' not imported.");
 		} catch (DictionaryImportException e) {
 			stop();
 			sqlite.failTransaction();
-			self.lastAutoLoadAttemptTime.put(language.getId(), null);
+			lastAutoLoadAttemptTime.put(language.getId(), null);
 			sendImportError(DictionaryImportException.class.getSimpleName(), language.getId(), e.line);
 
 			Logger.e(
@@ -226,9 +227,9 @@ public class DictionaryLoader {
 			sendError(e.getClass().getSimpleName(), language.getId());
 
 			if (e instanceof UnknownHostException) {
-				self.lastAutoLoadAttemptTime.put(language.getId(), System.currentTimeMillis());
+				lastAutoLoadAttemptTime.put(language.getId(), System.currentTimeMillis());
 			} else {
-				self.lastAutoLoadAttemptTime.put(language.getId(), null);
+				lastAutoLoadAttemptTime.put(language.getId(), null);
 			}
 
 			Logger.e(

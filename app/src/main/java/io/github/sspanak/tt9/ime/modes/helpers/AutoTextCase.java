@@ -13,12 +13,14 @@ public class AutoTextCase {
 	@NonNull private final Sequences sequences;
 	@NonNull private final SettingsStore settings;
 	private final boolean isUs;
+	private boolean skipNext;
 
 
 	public AutoTextCase(@NonNull SettingsStore settingsStore, @NonNull Sequences sequences, @Nullable InputType inputType) {
 		this.sequences = sequences;
 		settings = settingsStore;
 		isUs = inputType != null && inputType.isUs();
+		skipNext = false;
 	}
 
 	/**
@@ -51,7 +53,7 @@ public class AutoTextCase {
 		if (
 			// When the setting is off, don't do any changes.
 			!settings.getAutoTextCase()
-			// If the user wants to type in uppercase, this must be for a reason, so we better not override it.
+			// If the user has explicitly selected uppercase, we respect that.
 			|| currentTextCase == InputMode.CASE_UPPER
 			// we do not have text fields that expect sentences, so disable the feature to save some resources
 			|| isUs
@@ -59,7 +61,13 @@ public class AutoTextCase {
 			return currentTextCase;
 		}
 
-		if (textFieldTextCase != InputMode.CASE_UNDEFINED) {
+		if (skipNext) {
+			skipNext = false;
+			return textFieldTextCase != InputMode.CASE_UNDEFINED ? textFieldTextCase : currentTextCase;
+		}
+
+		// lowercase also takes priority but not as strict as uppercase
+		if (textFieldTextCase != InputMode.CASE_UNDEFINED && currentTextCase != InputMode.CASE_LOWER) {
 			return textFieldTextCase;
 		}
 
@@ -79,11 +87,21 @@ public class AutoTextCase {
 			return InputMode.CASE_CAPITALIZE;
 		}
 
-		// Prevent English "I", inserted in the middle of a word, from being uppercase.
-		if (sequences.isEnglishI(language, digitSequence) && Text.isNextToWord(beforeCursor)) {
+		// 1. Stay in lowercase within the same sentence, in case the user has selected lowercase.
+		// or 2. Prevent English "I", inserted in the middle of a word, from being uppercase.
+		if (currentTextCase == InputMode.CASE_LOWER || (sequences.isEnglishI(language, digitSequence) && Text.isNextToWord(beforeCursor))) {
 			return InputMode.CASE_LOWER;
 		}
 
 		return InputMode.CASE_DICTIONARY;
+	}
+
+
+	public void skipNext() {
+		skipNext = true;
+	}
+
+	public void doNotSkipNext() {
+		skipNext = false;
 	}
 }

@@ -17,8 +17,8 @@ public class Text extends TextTools {
 	private final String text;
 
 	private static final Pattern QUICK_DELETE_GROUP = Pattern.compile("(?:([\\s\\u3000]{2,})|([.,、。，،]{2,})|([^、。，\\s\\u3000]*.))$");
-	private static final Pattern PREVIOUS_WORD = Pattern.compile("(?<=\\s|^)([\\p{L}\\p{Mc}\\p{Mn}\\p{Me}\\x{200D}\\x{200C}]+)$");
-	private static final Pattern PREVIOUS_WORD_WITH_APOSTROPHES = Pattern.compile("(?<=\\s|^)([\\p{L}\\p{Mc}\\p{Mn}\\p{Me}\\x{200D}\\x{200C}']+)$");
+	private static final Pattern PREVIOUS_WORD = Pattern.compile("(?<=\\s|^)([\\p{L}\\p{Mc}\\p{Mn}\\p{Me}\\x{200D}\\x{200C}]+)(?!\\n)$");
+	private static final Pattern PREVIOUS_WORD_WITH_APOSTROPHES = Pattern.compile("(?<=\\s|^)([\\p{L}\\p{Mc}\\p{Mn}\\p{Me}\\x{200D}\\x{200C}']+)(?!\\n)$");
 	private static final Pattern PENULTIMATE_WORD = Pattern.compile("(?<=\\s|^)([\\p{L}\\p{Mc}\\p{Mn}\\p{Me}\\x{200D}\\x{200C}]+)[\\s'][^\\s']*$");
 	private static final Pattern PENULTIMATE_WORD_WITH_APOSTROPHES = Pattern.compile("(?<=\\s|^)([\\p{L}\\p{Mc}\\p{Mn}\\p{Me}\\x{200D}\\x{200C}']+)\\s\\S*$");
 
@@ -36,7 +36,7 @@ public class Text extends TextTools {
 
 
 	public String capitalize() {
-		if (language == null || text == null || text.isEmpty() || !language.hasUpperCase()) {
+		if (language == null || text == null || text.isEmpty() || !language.hasUpperCase() || !Character.isAlphabetic(text.charAt(0))) {
 			return text;
 		}
 
@@ -141,12 +141,24 @@ public class Text extends TextTools {
 			return false;
 		}
 
-		if (!Character.isUpperCase(text.charAt(0))) {
-			return false;
-		}
+		char[] chars = text.toCharArray();
+		boolean firstLetterFound = false;
 
-		for (int i = 1, end = text.length(); i < end; i++) {
-			if (Character.isUpperCase(text.charAt(i))) {
+		for (int i = 0, end = text.length(); i < end; i++) {
+			if (!Character.isAlphabetic(chars[i])) {
+				continue;
+			}
+
+			if (!firstLetterFound) {
+				if (Character.isUpperCase(chars[i])) {
+					firstLetterFound = true;
+					continue;
+				} else {
+					return false;
+				}
+			}
+
+			if (Character.isUpperCase(chars[i])) {
 				return false;
 			}
 		}
@@ -165,7 +177,7 @@ public class Text extends TextTools {
 
 
 	public boolean isUpperCase() {
-		return language != null && text != null && text.toUpperCase(language.getLocale()).equals(text);
+		return language != null && text != null && language.hasUpperCase() && text.toUpperCase(language.getLocale()).equals(text);
 	}
 
 

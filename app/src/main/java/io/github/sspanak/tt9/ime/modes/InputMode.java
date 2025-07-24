@@ -78,6 +78,20 @@ abstract public class InputMode {
 		}
 	}
 
+
+	public InputMode copy(InputMode other) {
+		if (other == null || InputModeKind.isNumeric(this) || InputModeKind.isNumeric(other)) {
+			return this;
+		}
+
+		autoAcceptTimeout = -1;
+		textCase = other.textCase;
+		setSequence(other.digitSequence);
+
+		return this;
+	}
+
+
 	// Key handlers. Return "true" when handling the key or "false", when is nothing to do.
 	public boolean onBackspace() { return false; }
 	abstract public boolean onNumber(int number, boolean hold, int repeat);
@@ -187,7 +201,12 @@ abstract public class InputMode {
 		textCase = allowedTextCases.get(0);
 	}
 
-	public boolean nextTextCase() {
+	/**
+	 * Switches to the next available text case. Returns "false" when the language has no upper case.
+	 * If "analyzeSurroundingText" is true, and when the mode supports text analyzing, it may apply
+	 * additional logic to determine the next valid text case.
+	 */
+	public boolean nextTextCase(@Nullable String currentWord, int displayTextCase) {
 		if (!language.hasUpperCase()) {
 			return false;
 		}
@@ -199,6 +218,7 @@ abstract public class InputMode {
 	}
 
 	public void determineNextWordTextCase(int nextDigit) {}
+	public void skipNextTextCaseDetection() {}
 
 	// Based on the internal logic of the mode (punctuation or grammar rules), re-adjust the text case for when getSuggestions() is called.
 	protected String adjustSuggestionTextCase(String word, int newTextCase) { return word; }

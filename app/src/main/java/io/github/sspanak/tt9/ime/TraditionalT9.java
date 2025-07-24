@@ -6,7 +6,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
-import android.view.inputmethod.InputConnection;
 
 import androidx.annotation.NonNull;
 
@@ -14,6 +13,7 @@ import java.util.ArrayList;
 
 import io.github.sspanak.tt9.db.DataStore;
 import io.github.sspanak.tt9.db.words.DictionaryLoader;
+import io.github.sspanak.tt9.hacks.AppHacks;
 import io.github.sspanak.tt9.hacks.InputType;
 import io.github.sspanak.tt9.ime.modes.InputModeKind;
 import io.github.sspanak.tt9.languages.Language;
@@ -33,6 +33,7 @@ public class TraditionalT9 extends MainViewHandler {
 
 	@NonNull private final Handler backgroundTasks = new Handler(Looper.getMainLooper());
 	@NonNull private final Handler zombieDetector = new Handler(Looper.getMainLooper());
+	@NonNull private final Handler heartbeatDetector = new Handler(Looper.getMainLooper());
 	private boolean isDead = false;
 	private int zombieChecks = 0;
 
@@ -44,7 +45,7 @@ public class TraditionalT9 extends MainViewHandler {
 			return false;
 		}
 
-		setInputField(getCurrentInputConnection(), getCurrentInputEditorInfo());
+		setInputField(getCurrentInputEditorInfo());
 		return shouldBeVisible();
 	}
 
@@ -85,13 +86,13 @@ public class TraditionalT9 extends MainViewHandler {
 			LOG_TAG,
 			"===> Start Up; packageName: " + inputField.packageName + " inputType: " + inputField.inputType + " actionId: " + inputField.actionId + " imeOptions: " + inputField.imeOptions + " privateImeOptions: " + inputField.privateImeOptions + " extras: " + inputField.extras
 		);
-		onStart(getCurrentInputConnection(), inputField);
+		onStart(inputField);
 	}
 
 
 	@Override
 	public void onStartInputView(EditorInfo inputField, boolean restarting) {
-		onStart(getCurrentInputConnection(), inputField);
+		onStart(inputField);
 	}
 
 
@@ -141,13 +142,19 @@ public class TraditionalT9 extends MainViewHandler {
 
 
 	@Override
-	protected boolean onStart(InputConnection connection, EditorInfo field) {
-		if (zombieChecks == 0 && !SystemSettings.isTT9Selected(this)) {
-			startZombieCheck();
+	protected boolean onStart(EditorInfo field) {
+		if (SystemSettings.isTT9Selected(this)) {
+			startHeartbeatCheck();
+		} else {
+			if (zombieChecks == 0) {
+				startZombieCheck();
+			}
 			return false;
 		}
 
-		if (isDead || !super.onStart(connection, field)) {
+		AppHacks.onStart(settings, field);
+
+		if (isDead || !super.onStart(field)) {
 			setStatusIcon(mInputMode, mLanguage);
 			return false;
 		}
@@ -162,7 +169,7 @@ public class TraditionalT9 extends MainViewHandler {
 			initUi(mInputMode);
 		}
 
-		InputType newInputType = new InputType(getApplicationContext(), connection, field);
+		InputType newInputType = new InputType(this, field);
 
 		if (newInputType.isText()) {
 			DataStore.loadWordPairs(DictionaryLoader.getInstance(this), LanguageCollection.getAll(settings.getEnabledLanguageIds()));
@@ -198,6 +205,8 @@ public class TraditionalT9 extends MainViewHandler {
 		if (zombieChecks == 0) {
 			startZombieCheck();
 		}
+
+		stopHeartbeatCheck();
 	}
 
 
@@ -209,7 +218,7 @@ public class TraditionalT9 extends MainViewHandler {
 
 
 	private void askForNotifications() {
-		if (DeviceInfo.AT_LEAST_ANDROID_13 && !InputModeKind.isPassthrough(mInputMode) && settings.shouldAskForNotifications()) {
+		if (settings.shouldAskForNotifications() && !InputModeKind.isPassthrough(mInputMode) && !inputType.isUs()) {
 			settings.setNotificationsApproved(false);
 			RequestPermissionDialog.show(this, Manifest.permission.POST_NOTIFICATIONS);
 		}
@@ -217,10 +226,31 @@ public class TraditionalT9 extends MainViewHandler {
 
 
 	/**
-	 * On Android 11+ the IME is sometimes not killed when the user switches to a different one.
-	 * Here we attempt to detect if we are disabled, then hide and kill ourselves.
+	 * On Android 11+ onStop() and onDestroy() are sometimes not called when the user switches to a
+	 * different IME. Here we attempt to detect if we are disabled, then hide and kill ourselves.
 	 */
-	protected void startZombieCheck() {
+	private void startHeartbeatCheck() {
+		if (!SystemSettings.isTT9Selected(this)) {
+			onZombie();
+		} else if (!isDead && !InputModeKind.isPassthrough(mInputMode)) {
+			heartbeatDetector.postDelayed(this::startHeartbeatCheck, SettingsStore.ZOMBIE_HEARTBEAT_INTERVAL);
+			Logger.v(LOG_TAG, "===> Heart is beating");
+		}
+	}
+
+
+	private void stopHeartbeatCheck() {
+		if (!DeviceInfo.AT_LEAST_ANDROID_10 || heartbeatDetector.hasCallbacks(this::startHeartbeatCheck)) {
+			heartbeatDetector.removeCallbacksAndMessages(null);
+			Logger.d(LOG_TAG, "===> Heartbeat check stopped");
+		}
+	}
+
+
+	/**
+	 * Similar to the heartbeat check, but detects if we are on when invisible or after re-init.
+	 */
+	private void startZombieCheck() {
 		if (zombieChecks > 0 && !SystemSettings.isTT9Selected(this)) {
 			zombieChecks = 0;
 			onZombie();
@@ -236,7 +266,7 @@ public class TraditionalT9 extends MainViewHandler {
 	}
 
 
-	protected void onZombie() {
+	private void onZombie() {
 		if (isDead) {
 			Logger.w(LOG_TAG, "===> Already dead. Cannot kill self.");
 			return;
@@ -251,13 +281,12 @@ public class TraditionalT9 extends MainViewHandler {
 
 
 	protected void cleanUp() {
-		super.cleanUp();
-		setInputField(null, null);
-		backgroundTasks.removeCallbacksAndMessages(null);
-		zombieChecks = SettingsStore.ZOMBIE_CHECK_MAX;
+		stopHeartbeatCheck();
 		zombieDetector.removeCallbacksAndMessages(null);
-		LanguageCollection.destroy();
-		DataStore.destroy();
+		zombieChecks = SettingsStore.ZOMBIE_CHECK_MAX;
+		backgroundTasks.removeCallbacksAndMessages(null);
+		super.cleanUp();
+		setInputField(null);
 		Logger.d(LOG_TAG, "===> Final cleanup completed");
 	}
 
