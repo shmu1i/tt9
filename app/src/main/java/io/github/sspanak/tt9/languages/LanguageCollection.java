@@ -113,6 +113,20 @@ public class LanguageCollection {
 		return getAll(languageIds, false);
 	}
 
+	public static ArrayList<Integer> getDefaultFirstRunLanguageIds() {
+		ArrayList<Integer> defaultIds = new ArrayList<>();
+		
+		// Direct language IDs calculated from locale strings:
+		// English (en -> "EN"): 453
+		// Hebrew (iw-IL -> "IWIL"): 403177  
+		// Yiddish (ji-JI -> "JIJI"): 305450
+		defaultIds.add(453);    // English
+		defaultIds.add(403177); // Hebrew
+		defaultIds.add(305450); // Yiddish
+		
+		return defaultIds;
+	}
+
 	public static ArrayList<Language> getAll(boolean sort) {
 		ArrayList<NaturalLanguage> langList = new ArrayList<>(self.languages.values());
 

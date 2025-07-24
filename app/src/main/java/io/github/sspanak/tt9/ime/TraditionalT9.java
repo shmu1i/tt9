@@ -10,14 +10,19 @@ import android.view.inputmethod.InputConnection;
 
 import androidx.annotation.NonNull;
 
+import java.util.ArrayList;
+
 import io.github.sspanak.tt9.db.DataStore;
 import io.github.sspanak.tt9.db.words.DictionaryLoader;
 import io.github.sspanak.tt9.hacks.InputType;
 import io.github.sspanak.tt9.ime.modes.InputModeKind;
+import io.github.sspanak.tt9.languages.Language;
 import io.github.sspanak.tt9.languages.LanguageCollection;
+import io.github.sspanak.tt9.languages.NaturalLanguage;
 import io.github.sspanak.tt9.preferences.settings.SettingsStore;
 import io.github.sspanak.tt9.ui.UI;
 import io.github.sspanak.tt9.ui.dialogs.RequestPermissionDialog;
+import io.github.sspanak.tt9.ui.notifications.DictionaryLoadingBar;
 import io.github.sspanak.tt9.util.Logger;
 import io.github.sspanak.tt9.util.sys.Clipboard;
 import io.github.sspanak.tt9.util.sys.DeviceInfo;
@@ -125,6 +130,12 @@ public class TraditionalT9 extends MainViewHandler {
 		Logger.setLevel(settings.getLogLevel());
 		LanguageCollection.init(this);
 		DataStore.init(this);
+		
+		// First run setup: enable default languages and load dictionaries
+		if (settings.isFirstRun()) {
+			setupFirstRunLanguages();
+		}
+		
 		super.onInit();
 	}
 
@@ -300,6 +311,69 @@ public class TraditionalT9 extends MainViewHandler {
 		DataStore.saveWordPairs();
 		if (!DictionaryLoader.getInstance(this).isRunning()) {
 			DataStore.normalizeNext();
+		}
+	}
+
+
+	private void setupFirstRunLanguages() {
+		Logger.i(LOG_TAG, "First run detected - setting up default languages: English, Hebrew, Yiddish");
+		
+		// Get the default language IDs
+		ArrayList<Integer> defaultLanguageIds = LanguageCollection.getDefaultFirstRunLanguageIds();
+		
+		if (defaultLanguageIds.isEmpty()) {
+			Logger.w(LOG_TAG, "No default language IDs found for first run");
+			settings.setFirstRunComplete();
+			return;
+		}
+		
+		// Save the enabled languages
+		settings.saveEnabledLanguageIds(defaultLanguageIds);
+		
+		// Set English as the default input language (ID: 453)
+		final int ENGLISH_ID = 453;
+		if (defaultLanguageIds.contains(ENGLISH_ID)) {
+			settings.saveInputLanguage(ENGLISH_ID);
+		}
+		
+		// Show initial notification to user
+		UI.toast(this, "Loading T9 dictionaries. T9 will not work until complete.");
+		
+		// Set up progress monitoring to mark first run complete when loading finishes
+		DictionaryLoadingBar progressBar = DictionaryLoadingBar.getInstance(this);
+		progressBar.setOnStatusChange(() -> {
+			if (!progressBar.inProgress()) {
+				// Loading finished (success, failure, or cancelled)
+				progressBar.setOnStatusChange(null);
+				settings.setFirstRunComplete();
+				
+				if (progressBar.isFailed()) {
+					UI.toast(this, "Dictionary loading failed: " + progressBar.getMessage());
+					Logger.w(LOG_TAG, "First run dictionary loading failed: " + progressBar.getMessage());
+				} else if (progressBar.isCancelled()) {
+					Logger.i(LOG_TAG, "First run dictionary loading cancelled by user");
+				} else {
+					UI.toast(this, "T9 dictionaries loaded successfully. T9 is now ready to use.");
+					Logger.i(LOG_TAG, "First run dictionary loading completed successfully");
+				}
+			}
+		});
+		
+		// Load dictionaries for the enabled languages
+		ArrayList<Language> languagesToLoad = LanguageCollection.getAll(defaultLanguageIds);
+		if (!languagesToLoad.isEmpty()) {
+			Logger.i(LOG_TAG, "Loading dictionaries for " + languagesToLoad.size() + " default languages");
+			if (!DictionaryLoader.getInstance(this).load(this, languagesToLoad)) {
+				// Loading failed to start
+				progressBar.setOnStatusChange(null);
+				settings.setFirstRunComplete();
+				Logger.w(LOG_TAG, "Failed to start dictionary loading for first run");
+			}
+		} else {
+			// No languages to load
+			progressBar.setOnStatusChange(null);
+			settings.setFirstRunComplete();
+			Logger.i(LOG_TAG, "No languages found for first run setup");
 		}
 	}
 }

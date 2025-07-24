@@ -37,3 +37,6 @@ t9build.properties
 proguard/
 *.sublime-project
 *.sublime-workspace
+
+# Claude AI
+.claude/

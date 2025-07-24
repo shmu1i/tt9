@@ -31,16 +31,25 @@ class SettingsPunctuation extends SettingsInput {
 
 	public void setDefaultCharOrder(@NonNull Language language, boolean overwrite) {
 		if (overwrite || noDefault0Chars(language)) {
-			String chars = new String(FORBIDDEN_CHARS_0) + String.join("", language.getKeyCharacters(0));
+			ArrayList<String> key0Chars = language.getKeyCharacters(0);
+			if (key0Chars == null) {
+				key0Chars = new ArrayList<>();
+			}
+			String chars = new String(FORBIDDEN_CHARS_0) + String.join("", key0Chars);
 			chars = chars.replace(" ", Characters.getSpace(language));
 			final int splitPosition = 7;
-			saveChars0(language, String.join("", chars.substring(0, splitPosition)));
+			int actualSplitPosition = Math.min(splitPosition, chars.length());
+			saveChars0(language, String.join("", chars.substring(0, actualSplitPosition)));
 			saveCharsExtra(language, CHARS_GROUP_0, String.join("", Characters.getCurrencies(language)));
-			saveCharsExtra(language, CHARS_AFTER_GROUP_0, chars.substring(splitPosition));
+			saveCharsExtra(language, CHARS_AFTER_GROUP_0, chars.substring(actualSplitPosition));
 		}
 
 		if (overwrite || noDefault1Chars(language)) {
-			saveChars1(language, String.join("", language.getKeyCharacters(1)));
+			ArrayList<String> key1Chars = language.getKeyCharacters(1);
+			if (key1Chars == null) {
+				key1Chars = new ArrayList<>();
+			}
+			saveChars1(language, String.join("", key1Chars));
 			saveCharsExtra(language, CHARS_GROUP_1, "");
 			saveCharsExtra(language, CHARS_AFTER_GROUP_1, "");
 		}

@@ -48,4 +48,15 @@ public class SettingsStore extends SettingsHotkeys {
 
 	/************* hacks *************/
 	public final static int PREFERENCES_CLICK_DEBOUNCE_TIME = 250; // ms
+
+
+	/************* first run setup *************/
+	public boolean isFirstRun() {
+		return prefs.getBoolean("pref_first_run", true);
+	}
+
+	public void setFirstRunComplete() {
+		prefsEditor.putBoolean("pref_first_run", false);
+		prefsEditor.apply();
+	}
 }
